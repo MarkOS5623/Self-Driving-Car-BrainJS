@@ -29,8 +29,8 @@ class Car{
                     inputSize: 5,
                     hiddenLayers: [6],
                     outputSize: 4,
-                    learningRate: 0.3,
-                    iterations: 20000,
+                    learningRate: 0.5,
+                    iterations: 5000,
                 });
             }
         }
@@ -39,18 +39,21 @@ class Car{
     
     Trainer() {
         // Get input from sensor readings (distances to other objects)
-        const offsets = this.sensor.readings.map(s => (s == null ? 0 : 1 - s.offset));
-        const maker = new Level(5, 4);
+        const offsets = this.sensor.readings.map(s => (s == null ? 0 : 1 - s.offset)); // current sensor readings used incase no data is present
+        const randomizer = new Level(5, 4); // emulates a level from a neural network
         const storedTrainingData = JSON.parse(localStorage.getItem('carTrainingData'));
+        const trainingExample = [];
         if(storedTrainingData){
             const inputArrays = storedTrainingData.map(entry => entry.input);
             for(let i = 0; i < inputArrays.length; i++){
-                const trainingExample = Level.feedForward(inputArrays[i], maker);
-                this.trainingData.push(trainingExample);
+                const data = Level.feedForward(inputArrays[i], randomizer); // uses a feedforward algorithem to proccess the inputs from the sensor
+                trainingExample.push(data); // new procced training data
+                this.trainingData.push(data); // all traindata
             }
-            this.network.train(this.trainingData);
+            this.network.train(trainingExample); // trains network using only new data
+            console.log("trained");
         } else{
-            const result = Level.feedForward(offsets, maker);
+            const result = Level.feedForward(offsets, randomizer); // creates random outputs for the sensor readings
             this.network.train([{ input: result.input, output: result.output }]);
         }
         this.trained = true;
@@ -67,7 +70,7 @@ class Car{
         if(this.sensor){ // if there is sensor then car is 
             this.sensor.update(roadBorders,traffic);
             const offsets = this.sensor.readings.map(s =>s == null ? 0 : 1 - s.offset);
-            if(this.trained === false){
+            if(this.trained === false){ // incase funtion is not trained
                 this.Trainer();
             }
             const outputs = Array.from(this.network.run(offsets).map(value => (value >= 0.5 ? 1 : 0))); 

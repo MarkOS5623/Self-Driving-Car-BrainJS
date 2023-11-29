@@ -1,11 +1,11 @@
-const carCanvas=document.getElementById("carCanvas");
+const carCanvas = document.getElementById("carCanvas");
 carCanvas.width = 200;
 
 const carCtx = carCanvas.getContext("2d");
 
-const road = new Road(carCanvas.width/2,carCanvas.width*0.9);
+const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9);
 
-const N = 50; //number of AI cars
+const N = 100; //number of AI cars. start with 100 and reduce as traindata grows
 const cars = generateCars(N);
 let bestCar = cars[0]; // smartest car ie the one who makes it furtherest
 
@@ -25,7 +25,6 @@ function save(){ // saves the smartest car to localStorage
             localStorage.setItem("bestBrain", JSON.stringify(json));
             localStorage.setItem('carTrainingData', JSON.stringify(bestCar.trainingData));
             console.log("Save successful");
-            console.log(bestCar.trainingData);
         } else {
             console.error("No best car or network found to save.");
         }
@@ -36,8 +35,8 @@ function save(){ // saves the smartest car to localStorage
 
 function discard(){
     try{
-        localStorage.removeItem("bestBrain");
-        localStorage.removeItem("carTrainingData");
+        localStorage.removeItem("bestBrain"); // smartest network
+        localStorage.removeItem("carTrainingData"); // best training data
         console.log("delete succesful");
     } catch (error) {
         console.error("Error deleting brain and training data:", error);
@@ -47,7 +46,7 @@ function discard(){
 function generateCars(N) {
     const cars = [];
     for (let i = 1; i <= N; i++) {
-        if (i === 1) {
+        if (i === 1) { // one car keeps it brain from before
             const storedBrain = localStorage.getItem("bestBrain");
             try {
                 const brainData = storedBrain ? JSON.parse(storedBrain) : null;
@@ -56,7 +55,7 @@ function generateCars(N) {
                 console.error("Error parsing stored brain data:", error);
                 cars.push(new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4));
             }
-        } else {
+        } else { // the rest get the same brain but also get addional data to learn from ei mutating it
             const storedBrain = localStorage.getItem("bestBrain");
             try {
                 const brainData = storedBrain ? JSON.parse(storedBrain) : null;
