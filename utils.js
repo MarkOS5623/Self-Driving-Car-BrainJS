@@ -47,12 +47,38 @@ function getRGBA(value){
     return "rgba("+ R + "," + G + "," + B + "," + alpha + ")";
 }
                
-function saveLog() {
-    var link = document.createElement('a');
-    link.href = 'data:text/plain;charset=UTF-8,' + encodeURIComponent(file);
-    link.innerHTML = 'download';
-    link.download = 'Console_log.txt';     
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+async function save() {
+    try {
+        if (bestCar && bestCar.network) {
+            const saveResult = await bestCar.network.save('localstorage://bestModel');
+            localStorage.setItem('carTrainingData', JSON.stringify(bestCar.trainingData));
+            console.log("Save successful");
+        } else {
+            console.error("No best car or network found to save.");
+        }
+    } catch (error) {
+        console.error("Error saving brain and training data:", error);
+    }
+}
+
+
+function discard() {
+    try {
+        //bestCar.network.layers.forEach(l => l.dispose())
+        localStorage.removeItem("carTrainingData");
+        console.log("Delete successful");
+    } catch (error) {
+        console.error("Error deleting brain and training data:", error);
+    }
+}
+
+function generateRandomInput() {
+    // Implement logic to generate random input based on sensor readings
+    return [Math.random(), Math.random(), Math.random(), Math.random(), Math.random()];
+}
+
+function generateRandomOutput() {
+    // Implement logic to generate random output (size 4 array of ones and zeros)
+    const randomIndex = Math.floor(Math.random() * 4);
+    return [0, 0, 0, 0].map((val, index) => (index === randomIndex ? 1 : val));
 }

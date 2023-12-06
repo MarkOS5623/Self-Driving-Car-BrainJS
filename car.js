@@ -1,6 +1,5 @@
-
 class Car{
-    constructor(x , y, width, height, controlType, maxSpeed = 4, data, mutate = false){
+    constructor(x, y, width, height, controlType, maxSpeed = 4, data, mutate = false) {
         this.x = x;
         this.y = y;
         this.width = width;
@@ -14,51 +13,93 @@ class Car{
         this.useBrain = controlType == "AI";
         this.trained = false;
         this.trainingData = [];
-        if(controlType != "DUMMY"){
+        this.modelCompiled = false;
+        if (controlType !== "DUMMY") {
             this.sensor = new Sensor(this);
-            if(data){
-                this.network = new brain.NeuralNetwork();
-                this.network.fromJSON(data);
-                if(mutate != true){
+            if (data == true) {
+                if (!mutate) {
                     this.trained = true;
                 } else {
                     this.trained = false;
                 }
-            } else{
-                this.network = new brain.NeuralNetwork({
-                    inputSize: 5,
-                    hiddenLayers: [6],
-                    outputSize: 4,
-                    learningRate: 0.5,
-                    iterations: 5000,
-                });
+            } else {
+                const input = tf.input({shape: [5]});
+                const dense1 = tf.layers.dense({ units: 6, activation: 'relu'}).apply(input);
+                const dense2 = tf.layers.dense({ units: 4, activation: 'sigmoid'}).apply(dense1);
+                this.network = tf.model({inputs: input, outputs: dense2});
             }
         }
+        
+    
         this.controls = new Controls(controlType);
     }
     
-    Trainer() {
-        // Get input from sensor readings (distances to other objects)
-        const offsets = this.sensor.readings.map(s => (s == null ? 0 : 1 - s.offset)); // current sensor readings used incase no data is present
-        const randomizer = new Level(5, 4); // emulates a level from a neural network
-        const storedTrainingData = JSON.parse(localStorage.getItem('carTrainingData'));
-        const trainingExample = [];
-        if(storedTrainingData){
-            const inputArrays = storedTrainingData.map(entry => entry.input);
-            for(let i = 0; i < inputArrays.length; i++){
-                const data = Level.feedForward(inputArrays[i], randomizer); // uses a feedforward algorithem to proccess the inputs from the sensor
-                trainingExample.push(data); // new procced training data
-                this.trainingData.push(data); // all traindata
+    async setWeights(data) {
+        try {
+            if (this.settingWeightsInProgress) {
+                console.log("Setting weights already in progress");
+                return;
             }
-            this.network.train(trainingExample); // trains network using only new data
-            console.log("trained");
-        } else{
-            const result = Level.feedForward(offsets, randomizer); // creates random outputs for the sensor readings
-            this.network.train([{ input: result.input, output: result.output }]);
+            this.settingWeightsInProgress = true;
+            await this.network.layers[1].setWeights([data.weights[0], data.weights[1]]);
+            await this.network.layers[2].setWeights([data.weights[2], data.weights[3]]);
+        } catch (error) {
+            console.log("Network Layers: ", this.network.layers);
+            console.log("Data Weights: ", data.weights);
+            console.log("Error setting weights: ", error);
+            // Handle the error without calling setWeights again
+        } finally {
+            this.settingWeightsInProgress = false;
         }
-        this.trained = true;
     }
+
+    async Trainer() {
+        try {
+            if (!this.network) {
+                console.error("No network");
+                return;
+            }
     
+            if (this.trainingInProgress) {
+                console.log("Training already in progress");
+                return;
+            }
+    
+            this.trainingInProgress = true;
+    
+            const storedTrainingData = JSON.parse(localStorage.getItem('carTrainingData'));
+    
+            if (!storedTrainingData || storedTrainingData.length === 0) {
+                console.log("No stored training data, creating random training data");
+                const randomInput = generateRandomInput(); // Implement a method to generate random input
+                const randomOutput = generateRandomOutput(); // Implement a method to generate random output
+                const xs = tf.tensor2d([randomInput]);
+                const ys = tf.tensor2d([randomOutput]);
+    
+                await this.network.compile({ loss: 'meanSquaredError', optimizer: 'sgd' });
+                await this.network.fit(xs, ys, { epochs: 3 });
+    
+                console.log("Model trained with random data");
+            } else {
+                const inputArrays = storedTrainingData.map(entry => entry.input);
+    
+                const xs = tf.tensor2d(inputArrays);
+                const ys = tf.tensor2d(storedTrainingData.map(data => data.output));
+    
+                // Compile and fit the model
+                await this.network.compile({ loss: 'meanSquaredError', optimizer: 'sgd' });
+                await this.network.fit(xs, ys, { epochs: 3 });
+    
+                console.log("Model trained with stored training data");
+            }
+    
+            this.trained = true;
+        } catch (error) {
+            console.log("Error during training: ", error);
+        } finally {
+            this.trainingInProgress = false;
+        }
+    }
     
     update(roadBorders, traffic){
         if(!this.damaged){
@@ -67,22 +108,28 @@ class Car{
             this.damaged = this.#assessDamage(roadBorders, traffic);
         }
 
-        if(this.sensor){ // if there is sensor then car is 
-            this.sensor.update(roadBorders,traffic);
-            const offsets = this.sensor.readings.map(s =>s == null ? 0 : 1 - s.offset);
-            if(this.trained === false){ // incase funtion is not trained
-                this.Trainer();
-            }
-            const outputs = Array.from(this.network.run(offsets).map(value => (value >= 0.5 ? 1 : 0))); 
-
-            if(this.useBrain){
+        if (this.sensor) {
+            this.sensor.update(roadBorders, traffic);
+            
+            const offsets = this.sensor.readings.map(s => s == null ? 0 : 1 - s.offset);
+            
+            // Make predictions with the neural network
+            const inputTensor = tf.tensor2d([offsets]);
+            const outputTensor = this.network.predict(inputTensor);
+            const outputs = Array.from(outputTensor.dataSync()).map(value => (value >= 0.5 ? 1 : 0));
+        
+            // Dispose of the input and output tensors
+            inputTensor.dispose();
+            outputTensor.dispose();
+        
+            if (this.useBrain) {
                 this.controls.forward = outputs[0];
                 this.controls.left = outputs[1];
                 this.controls.right = outputs[2];
                 this.controls.reverse = outputs[3];
             }
-            
-            const trainingExample = { input: offsets, output: (outputs) }
+        
+            const trainingExample = { input: offsets, output: outputs };
             this.trainingData.push(trainingExample);
         }
     }

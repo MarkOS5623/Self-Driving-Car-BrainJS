@@ -5,11 +5,7 @@ const carCtx = carCanvas.getContext("2d");
 
 const road = new Road(carCanvas.width / 2, carCanvas.width * 0.9);
 
-const N = 100; //number of AI cars. start with 100 and reduce as traindata grows
-const cars = generateCars(N);
-let bestCar = cars[0]; // smartest car ie the one who makes it furtherest
-
-const traffic=[ // 300 pixles seems to be ideal distance for the "dummy" cars
+const traffic = [ // 300 pixles seems to be ideal distance for the "dummy" cars
     new Car(road.getLaneCenter(1), -100, 30, 50, "DUMMY", 1), // Car(lane, distance from start, width, lenght, controlType, speed)
     new Car(road.getLaneCenter(0), -400, 30, 50, "DUMMY", 1),
     new Car(road.getLaneCenter(2), -700, 30, 50, "DUMMY", 1), // Car(lane, distance from start, width, lenght, controlType, speed)
@@ -18,89 +14,106 @@ const traffic=[ // 300 pixles seems to be ideal distance for the "dummy" cars
     new Car(road.getLaneCenter(0), -1400, 30, 50, "DUMMY", 1),
 ];
 
-function save(){ // saves the smartest car to localStorage
-    try {
-        if (bestCar && bestCar.network) {
-            const json = bestCar.network.toJSON();
-            localStorage.setItem("bestBrain", JSON.stringify(json));
-            localStorage.setItem('carTrainingData', JSON.stringify(bestCar.trainingData));
-            console.log("Save successful");
-        } else {
-            console.error("No best car or network found to save.");
-        }
-    } catch (error) {
-        console.error("Error saving brain and training data:", error);
-    }
-}
-
-function discard(){
-    try{
-        localStorage.removeItem("bestBrain"); // smartest network
-        localStorage.removeItem("carTrainingData"); // best training data
-        console.log("delete succesful");
-    } catch (error) {
-        console.error("Error deleting brain and training data:", error);
-    }
-}
-
-function generateCars(N) {
+async function generateCars(N) {
     const cars = [];
-    for (let i = 1; i <= N; i++) {
-        if (i === 1) { // one car keeps it brain from before
-            const storedBrain = localStorage.getItem("bestBrain");
-            try {
-                const brainData = storedBrain ? JSON.parse(storedBrain) : null;
-                cars.push(new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4, brainData));
-            } catch (error) {
-                console.error("Error parsing stored brain data:", error);
-                cars.push(new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4));
+    const storedTrainingData = JSON.parse(localStorage.getItem('carTrainingData'));
+
+    for (let i = 0; i < N; i++) {
+        try {
+            if (i == 1 && storedTrainingData) {
+                const car = new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4, true);
+                try {
+                    car.network = await tf.loadLayersModel('localstorage://bestModel');
+                    console.log(car.network);
+                } catch (error) {
+                    console.log("Error loading network: ", error);
+                }
+                cars.push(car);
+            } else if (storedTrainingData) {
+                const car = new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4, true, true);
+                try {
+                    car.network = await tf.loadLayersModel('localstorage://bestModel');
+                    console.log(car.network);
+                } catch (error) {
+                    console.log("Error loading network: ", error);
+                }
+                try {
+                    if (car.trained == false) {
+                        await car.Trainer();
+                    }
+                } catch (error) {
+                    console.log("Error while training networks: ", error);
+                }
+                cars.push(car);
+            } else {
+                const car = new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4, false);
+                try {
+                    if (car.trained == false) {
+                        await car.Trainer();
+                    }
+                } catch (error) {
+                    console.log("Error while training networks: ", error);
+                }
+                cars.push(car);
             }
-        } else { // the rest get the same brain but also get addional data to learn from ei mutating it
-            const storedBrain = localStorage.getItem("bestBrain");
-            try {
-                const brainData = storedBrain ? JSON.parse(storedBrain) : null;
-                cars.push(new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4, brainData, true));
-            } catch(error) {
-                cars.push(new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4, null, true));
-                console.error("Error parsing stored brain data:", error);
-            }
+        } catch (error) {
+            console.error("Error creating car:", error);
         }
     }
+
     return cars;
 }
 
+async function main() {
+    const cars = await generateCars(100);
+    console.log(cars);
+    animate(cars);
+}
+let bestCar = [];
 
-animate();
+main();
 
-function animate(){
-    try{
-        for(let i=0;i<traffic.length;i++) { //update the location of "dummy" traffic cars
-            traffic[i].update(road.borders,[]);
+
+function animate(data) {
+    let cars = data;
+    bestCar = cars[0];
+
+    try {
+        for (let i = 0; i < traffic.length; i++) {
+            traffic[i].update(road.borders, []);
         }
-        for(let i=0;i<cars.length;i++) {
+
+        for (let i = 0; i < cars.length; i++) {
             cars[i].update(road.borders, traffic);
         }
-        bestCar = cars.find(c =>c.y  == Math.min(...cars.map(c =>c.y)));
+
+        for (let i = 0; i < cars.length; i++) {
+            if (cars[i].y !== undefined && (bestCar === undefined || cars[i].y < bestCar.y)) {
+                bestCar = cars[i];
+            }
+        }
+
         for (let i = 0; i < traffic.length; i++) {
             traffic[i].update(road.borders, []);
         }
     } catch (error) {
         console.error("Error updating traffic", error);
     }
-    carCanvas.height = window.innerHeight; 
+
+    carCanvas.height = window.innerHeight;
 
     carCtx.save();
-    carCtx.translate(0, -bestCar.y + carCanvas.height * 0.7); // centers car away from the top of the screen
+    carCtx.translate(0, -bestCar.y + carCanvas.height * 0.7);
 
     road.draw(carCtx);
-    
-    for(let i = 0; i < traffic.length; i++) {
+
+    for (let i = 0; i < traffic.length; i++) {
         traffic[i].draw(carCtx, "red");
     }
 
-    carCtx.globalAlpha = 0.2; // makes all the other AI cars transpernt
+    carCtx.globalAlpha = 0.2;
 
-    for(let i = 0; i < cars.length; i++) {
+    for (let i = 0; i < cars.length; i++) {
         cars[i].draw(carCtx, "blue");
     }
 
@@ -108,5 +121,5 @@ function animate(){
     bestCar.draw(carCtx, "blue", true);
 
     carCtx.restore();
-    requestAnimationFrame(animate);
+    requestAnimationFrame(() => animate(data));
 }
