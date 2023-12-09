@@ -24,7 +24,6 @@ async function generateCars(N) {
                 const car = new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4, true);
                 try {
                     car.network = await tf.loadLayersModel('localstorage://bestModel');
-                    console.log(car.network);
                 } catch (error) {
                     console.log("Error loading network: ", error);
                 }
@@ -32,8 +31,9 @@ async function generateCars(N) {
             } else if (storedTrainingData) {
                 const car = new Car(road.getLaneCenter(1), 100, 30, 50, "AI", 4, true, true);
                 try {
-                    car.network = await tf.loadLayersModel('localstorage://bestModel');
-                    console.log(car.network);
+                    const model = await tf.loadLayersModel('localstorage://bestModel');
+                    car.network = await mutateModel(model, 0.4);
+                    //console.log(car.network);
                 } catch (error) {
                     console.log("Error loading network: ", error);
                 }
@@ -66,7 +66,6 @@ async function generateCars(N) {
 
 async function main() {
     const cars = await generateCars(100);
-    console.log(cars);
     animate(cars);
 }
 let bestCar = [];
@@ -123,3 +122,31 @@ function animate(data) {
     carCtx.restore();
     requestAnimationFrame(() => animate(data));
 }
+
+async function mutateModel(model, mutationRate) {
+    const mutatedModel = await tf.tidy(() => {
+        const weights = model.getWeights();
+        const mutatedWeights = weights.map(layer => {
+            const shape = layer.shape;
+            const values = layer.dataSync().slice();
+            const mutatedValues = values.map(val => {
+                if (Math.random() < mutationRate) {
+                    // Mutate the weight based on your mutation strategy
+                    return val + (Math.random() - 0.5); // Example: Add a small random value
+                }
+                return val;
+            });
+            
+            //console.log("Original weights: ", values);
+            //console.log("Mutated weights: ", mutatedValues);
+           
+            return tf.tensor(mutatedValues, shape);
+        });
+        return tf.model({ inputs: model.inputs, outputs: model.outputs, layers: model.layers, trainable: model.trainable, weights: mutatedWeights });
+    });
+
+    return mutatedModel;
+}
+
+
+

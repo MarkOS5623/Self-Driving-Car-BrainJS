@@ -78,7 +78,6 @@ function generateRandomInput() {
 }
 
 function generateRandomOutput() {
-    // Implement logic to generate random output (size 4 array of ones and zeros)
-    const randomIndex = Math.floor(Math.random() * 4);
-    return [0, 0, 0, 0].map((val, index) => (index === randomIndex ? 1 : val));
+    // Generate a random binary array of the specified size
+    return Array.from({ length: 4 }, () => Math.round(Math.random()));
 }

@@ -24,7 +24,7 @@ class Car{
                 }
             } else {
                 const input = tf.input({shape: [5]});
-                const dense1 = tf.layers.dense({ units: 6, activation: 'relu'}).apply(input);
+                const dense1 = tf.layers.dense({ units: 6, activation: 'tanh'}).apply(input);
                 const dense2 = tf.layers.dense({ units: 4, activation: 'sigmoid'}).apply(dense1);
                 this.network = tf.model({inputs: input, outputs: dense2});
             }
@@ -70,14 +70,15 @@ class Car{
             const storedTrainingData = JSON.parse(localStorage.getItem('carTrainingData'));
     
             if (!storedTrainingData || storedTrainingData.length === 0) {
-                console.log("No stored training data, creating random training data");
-                const randomInput = generateRandomInput(); // Implement a method to generate random input
+                //console.log("No stored training data, creating random training data");
+                
+                const randomInput =  generateRandomInput()
                 const randomOutput = generateRandomOutput(); // Implement a method to generate random output
                 const xs = tf.tensor2d([randomInput]);
                 const ys = tf.tensor2d([randomOutput]);
     
                 await this.network.compile({ loss: 'meanSquaredError', optimizer: 'sgd' });
-                await this.network.fit(xs, ys, { epochs: 3 });
+                await this.network.fit(xs, ys, { epochs: 10 });
     
                 console.log("Model trained with random data");
             } else {
@@ -85,10 +86,10 @@ class Car{
     
                 const xs = tf.tensor2d(inputArrays);
                 const ys = tf.tensor2d(storedTrainingData.map(data => data.output));
-    
+                
                 // Compile and fit the model
                 await this.network.compile({ loss: 'meanSquaredError', optimizer: 'sgd' });
-                await this.network.fit(xs, ys, { epochs: 3 });
+                await this.network.fit(xs, ys, { epochs: 10 });
     
                 console.log("Model trained with stored training data");
             }
